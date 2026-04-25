@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+
+	<!-- App theme palette -->
 	<color name="colorPrimary">#1565C0</color>
 	<color name="colorPrimaryDark">#003c8f</color>
 	<color name="colorAccent">#4CAF50</color>
 	<color name="background">#EEF2F7</color>
 	<color name="white">#FFFFFF</color>
+
+	<!--
+        Required by VS-generated mipmap-anydpi-v26/icon.xml and icon_round.xml
+        for the Android 8+ adaptive launcher icon. Removing it breaks the build.
+    -->
+	<color name="launcher_background">#2C3E50</color>
+
 </resources>
