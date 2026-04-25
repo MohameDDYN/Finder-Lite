@@ -114,10 +114,12 @@ namespace Finder.Droid.Services
                 new Intent(this, typeof(MainActivity)),
                 pendingFlags);
 
+            // Use the launcher icon — guaranteed to exist in every Xamarin.Android
+            // project. Replace later with a custom white silhouette if desired.
             var builder = new Notification.Builder(this, CHANNEL_ID)
                 .SetContentTitle(title)
                 .SetContentText(body)
-                .SetSmallIcon(Resource.Drawable.ic_notification)
+                .SetSmallIcon(Resource.Mipmap.icon)
                 .SetContentIntent(pendingIntent)
                 .SetOngoing(true);
 
