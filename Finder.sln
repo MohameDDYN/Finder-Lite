@@ -1,0 +1,35 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34728.123
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Finder.Android", "Finder.Android\Finder.Android.csproj", "{C1546261-75A6-4708-A328-CA8F7849D26B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Finder", "Finder\Finder.csproj", "{06359C2C-9B17-4FA0-AF10-FF5A6E407566}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C1546261-75A6-4708-A328-CA8F7849D26B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C1546261-75A6-4708-A328-CA8F7849D26B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C1546261-75A6-4708-A328-CA8F7849D26B}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{C1546261-75A6-4708-A328-CA8F7849D26B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1546261-75A6-4708-A328-CA8F7849D26B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1546261-75A6-4708-A328-CA8F7849D26B}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{06359C2C-9B17-4FA0-AF10-FF5A6E407566}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{06359C2C-9B17-4FA0-AF10-FF5A6E407566}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{06359C2C-9B17-4FA0-AF10-FF5A6E407566}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{06359C2C-9B17-4FA0-AF10-FF5A6E407566}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{06359C2C-9B17-4FA0-AF10-FF5A6E407566}.Release|Any CPU.Build.0 = Release|Any CPU
+		{06359C2C-9B17-4FA0-AF10-FF5A6E407566}.Release|Any CPU.Deploy.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A74BC748-766E-437B-8BEC-FE514CB3D808}
+	EndGlobalSection
+EndGlobal
