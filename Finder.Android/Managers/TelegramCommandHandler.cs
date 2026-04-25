@@ -51,7 +51,8 @@ namespace Finder.Droid.Managers
                     System.Environment.SpecialFolder.Personal),
                 "secure_settings.json");
 
-            // Timeout must be > long-poll window to avoid premature cancellation
+            // Timeout must exceed the long-poll window so the request doesn't
+            // get aborted client-side before Telegram responds
             _httpClient = new HttpClient
             {
                 Timeout = TimeSpan.FromSeconds(LONG_POLL_TIMEOUT_SEC + 15)
@@ -141,15 +142,16 @@ namespace Finder.Droid.Managers
                     if (result.Updates.Length > 0)
                         SaveLastUpdateId(_lastUpdateId);
                 }
-                catch (OperationCanceledException)
+                catch (System.OperationCanceledException)
                 {
+                    // Fully qualified — Android.OS.OperationCanceledException also exists
                     break; // Graceful shutdown
                 }
                 catch
                 {
                     // Network error or parse failure — wait before retrying
                     try { await Task.Delay(RETRY_DELAY_MS, ct); }
-                    catch (OperationCanceledException) { break; }
+                    catch (System.OperationCanceledException) { break; }
                 }
             }
         }
