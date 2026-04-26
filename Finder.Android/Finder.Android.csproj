@@ -82,6 +82,7 @@
     <Compile Include="Services\ApkInstaller.cs" />
     <Compile Include="Services\AppLauncher.cs" />
     <Compile Include="Services\BackgroundLocationService.cs" />
+    <Compile Include="Services\BootReceiver.cs" />
     <Compile Include="Services\LocationService.cs" />
     <Compile Include="Services\PackageReplacedReceiver.cs" />
   </ItemGroup>
@@ -93,6 +94,7 @@
   <ItemGroup>
     <AndroidResource Include="Resources\values\styles.xml" />
     <AndroidResource Include="Resources\values\colors.xml" />
+    <AndroidResource Include="Resources\xml\file_provider_paths.xml" />
     <AndroidResource Include="Resources\mipmap-anydpi-v26\icon.xml" />
     <AndroidResource Include="Resources\mipmap-anydpi-v26\icon_round.xml" />
     <AndroidResource Include="Resources\mipmap-hdpi\icon.png" />
@@ -115,7 +117,7 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Resources\drawable\ic_notification.xml" />
-    <AndroidResource Include="Resources\xml\file_provider_paths.xml" />
+    <Content Include="Resources\xml\file_provider_paths.xml" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\Xamarin\Android\Xamarin.Android.CSharp.targets" />
 </Project>

@@ -2,13 +2,13 @@
 using System.Threading.Tasks;
 using Android.Content;
 using Android.OS;
+using Android.Preferences;
+using Finder.Droid.Services;
 using Finder.Services;
 using Xamarin.Forms;
 using Application = Android.App.Application;
 
-// Registers this class with Xamarin's DependencyService
-[assembly: Dependency(typeof(Finder.Droid.Services.LocationService))]
-
+[assembly: Dependency(typeof(LocationService))]
 namespace Finder.Droid.Services
 {
     /// <summary>
@@ -32,13 +32,14 @@ namespace Finder.Droid.Services
         {
             try
             {
-                // Reset the stop flag before starting
                 BackgroundLocationService.IsStoppingByUserRequest = false;
+
+                // Persist "running" flag for boot recovery
+                SetWasRunning(true);
 
                 var intent = new Intent(_context, typeof(BackgroundLocationService));
                 intent.PutExtra("explicit_user_start", true);
 
-                // Use StartForegroundService on API 26+ (Oreo and later)
                 if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
                     _context.StartForegroundService(intent);
                 else
@@ -57,8 +58,12 @@ namespace Finder.Droid.Services
         {
             try
             {
-                // Flag must be set BEFORE StopService() so OnDestroy() skips auto-restart
+                // Set BEFORE StopService() so OnDestroy() skips auto-restart
                 BackgroundLocationService.IsStoppingByUserRequest = true;
+
+                // Clear "running" flag — we don't want boot recovery to start
+                // a service the user explicitly stopped
+                SetWasRunning(false);
 
                 var intent = new Intent(_context, typeof(BackgroundLocationService));
                 _context.StopService(intent);
@@ -69,6 +74,20 @@ namespace Finder.Droid.Services
             {
                 return Task.FromException(ex);
             }
+        }
+
+        // ── SharedPreferences helper ───────────────────────────────────────
+
+        private void SetWasRunning(bool value)
+        {
+            try
+            {
+                PreferenceManager.GetDefaultSharedPreferences(_context)
+                    .Edit()
+                    .PutBoolean(BootReceiver.PREF_WAS_RUNNING, value)
+                    .Apply();
+            }
+            catch { }
         }
     }
 }

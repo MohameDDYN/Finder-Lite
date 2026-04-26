@@ -19,14 +19,14 @@
 	<!-- Required on Android 13 (API 33) to post notifications -->
 	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+	<!-- Required so BootReceiver can fire after device boot -->
+	<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
 	<!-- ── Self-update permissions ── -->
-	<!-- Required on Android 8+ to install APKs from this app -->
 	<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-	<!-- Allows replacing the existing installation -->
 	<uses-permission android:name="android.permission.REPLACE_EXISTING_PACKAGE" />
 
-	<!-- ── Package visibility (Android 11+) ──
-         Lets us launch the system Package Installer activity. -->
+	<!-- ── Package visibility (Android 11+) ── -->
 	<queries>
 		<intent>
 			<action android:name="android.intent.action.VIEW" />
