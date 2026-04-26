@@ -3,11 +3,14 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Android.Content;
+using Android.Content.PM;
 using Android.Locations;
 using Android.OS;
 using Android.Preferences;
+using Finder.Droid.Services;
 using Finder.Models;
 using Newtonsoft.Json;
+using Xamarin.Forms;
 using AndroidLocation = Android.Locations.Location;
 
 namespace Finder.Droid.Managers
@@ -15,23 +18,25 @@ namespace Finder.Droid.Managers
     /// <summary>
     /// Finder Lite — Telegram long-poll command handler.
     ///
-    /// Uses Telegram's server-side long-polling (timeout=30 s) so commands
-    /// are received with ~1–2 s latency without hammering the API.
-    ///
     /// Supported commands:
     ///   /start    — Welcome message
     ///   /help     — List commands
     ///   /location — Fresh GPS fix → sends map pin + coordinate details
-    ///   /status   — Service/GPS/battery status
+    ///   /status   — Service / GPS / battery status
+    ///   /version  — Show installed app version
+    ///   /update   — Remote APK self-update: /update &lt;version&gt; &lt;url&gt;
     /// </summary>
     public class TelegramCommandHandler
     {
         // ── Constants ──────────────────────────────────────────────────────
         private const string PREF_LAST_UPDATE_ID = "finder_lite_last_update_id";
+        private const string PREF_PENDING_VERSION = "finder_lite_pending_version";
         private const int LONG_POLL_TIMEOUT_SEC = 30;
-        private const int GPS_FIX_TIMEOUT_MS = 30_000;   // 30 s GPS timeout
-        private const int RETRY_DELAY_MS = 5_000;    // retry after error
-        private const int STARTUP_DELAY_MS = 2_000;    // let service settle
+        private const int GPS_FIX_TIMEOUT_MS = 30_000;
+        private const int RETRY_DELAY_MS = 5_000;
+        private const int STARTUP_DELAY_MS = 2_000;
+        // The user has up to 60 seconds to confirm an update on the dialog
+        private const int UPDATE_CONFIRM_TIMEOUT_MS = 60_000;
 
         // ── Fields ─────────────────────────────────────────────────────────
         private readonly Context _context;
@@ -51,14 +56,11 @@ namespace Finder.Droid.Managers
                     System.Environment.SpecialFolder.Personal),
                 "secure_settings.json");
 
-            // Timeout must exceed the long-poll window so the request doesn't
-            // get aborted client-side before Telegram responds
             _httpClient = new HttpClient
             {
                 Timeout = TimeSpan.FromSeconds(LONG_POLL_TIMEOUT_SEC + 15)
             };
 
-            // Restore the last processed update ID (prevents replaying old commands)
             _lastUpdateId = PreferenceManager
                 .GetDefaultSharedPreferences(_context)
                 .GetLong(PREF_LAST_UPDATE_ID, 0);
@@ -66,14 +68,9 @@ namespace Finder.Droid.Managers
 
         // ── Public lifecycle ───────────────────────────────────────────────
 
-        /// <summary>
-        /// Begins the long-poll loop on a background Task.
-        /// Optionally sends a startup message to Telegram.
-        /// </summary>
         public void Start(bool sendStartupMessage = false)
         {
-            if (_cts != null) return; // Guard against double-start
-
+            if (_cts != null) return;
             _cts = new CancellationTokenSource();
             Task.Run(() => LongPollLoopAsync(_cts.Token));
 
@@ -81,7 +78,6 @@ namespace Finder.Droid.Managers
                 Task.Run(() => SendStartupMessageAsync());
         }
 
-        /// <summary>Cancels the poll loop and releases resources.</summary>
         public void Stop()
         {
             try
@@ -104,8 +100,6 @@ namespace Finder.Droid.Managers
                 try
                 {
                     var settings = LoadSettings();
-
-                    // If settings are missing, wait and retry
                     if (settings == null ||
                         string.IsNullOrEmpty(settings.BotToken) ||
                         string.IsNullOrEmpty(settings.ChatId))
@@ -114,8 +108,6 @@ namespace Finder.Droid.Managers
                         continue;
                     }
 
-                    // Telegram long-poll: server blocks until a message arrives
-                    // or the timeout expires (whichever is first)
                     string url =
                         $"https://api.telegram.org/bot{settings.BotToken}/getUpdates" +
                         $"?offset={_lastUpdateId + 1}" +
@@ -127,29 +119,21 @@ namespace Finder.Droid.Managers
                     string json = await response.Content.ReadAsStringAsync();
 
                     var result = JsonConvert.DeserializeObject<TgResult>(json);
-
                     if (result?.Ok != true || result.Updates == null) continue;
 
                     foreach (var update in result.Updates)
                     {
                         if (update.UpdateId > _lastUpdateId)
                             _lastUpdateId = update.UpdateId;
-
                         await ProcessUpdateAsync(update, settings);
                     }
 
-                    // Persist the highest seen ID after each successful batch
                     if (result.Updates.Length > 0)
                         SaveLastUpdateId(_lastUpdateId);
                 }
-                catch (System.OperationCanceledException)
-                {
-                    // Fully qualified — Android.OS.OperationCanceledException also exists
-                    break; // Graceful shutdown
-                }
+                catch (System.OperationCanceledException) { break; }
                 catch
                 {
-                    // Network error or parse failure — wait before retrying
                     try { await Task.Delay(RETRY_DELAY_MS, ct); }
                     catch (System.OperationCanceledException) { break; }
                 }
@@ -165,25 +149,23 @@ namespace Finder.Droid.Managers
             string raw = update.Message?.Text?.Trim();
             if (string.IsNullOrEmpty(raw)) return;
 
-            // Lower-case and strip optional bot-username suffix (/cmd@BotName)
-            string cmd = raw.ToLowerInvariant();
+            // Split into command + parameter chunks
+            string[] parts = raw.Split(new[] { ' ' }, 2);
+            string cmd = parts[0].ToLowerInvariant();
+            string param = parts.Length > 1 ? parts[1].Trim() : null;
+
+            // Strip optional /cmd@BotName suffix
             int at = cmd.IndexOf('@');
             if (at > 0) cmd = cmd.Substring(0, at);
 
             switch (cmd)
             {
-                case "/start":
-                    await HandleStartAsync(settings);
-                    break;
-                case "/help":
-                    await HandleHelpAsync(settings);
-                    break;
-                case "/location":
-                    await HandleLocationAsync(settings);
-                    break;
-                case "/status":
-                    await HandleStatusAsync(settings);
-                    break;
+                case "/start": await HandleStartAsync(settings); break;
+                case "/help": await HandleHelpAsync(settings); break;
+                case "/location": await HandleLocationAsync(settings); break;
+                case "/status": await HandleStatusAsync(settings); break;
+                case "/version": await HandleVersionAsync(settings); break;
+                case "/update": await HandleUpdateAsync(settings, param); break;
                 default:
                     await SendMessageAsync(settings,
                         "❓ Unknown command.\nSend /help to see what I can do.");
@@ -192,14 +174,14 @@ namespace Finder.Droid.Managers
         }
 
         // ══════════════════════════════════════════════════════════════════
-        // Command handlers
+        // Command handlers — basic
         // ══════════════════════════════════════════════════════════════════
 
         private async Task HandleStartAsync(AppSettings s)
         {
             await SendMessageAsync(s,
                 "👋 *Welcome to Finder Lite!*\n\n" +
-                "I will send you the device's exact GPS location whenever you ask — " +
+                "I send the device's exact GPS location whenever you ask — " +
                 "nothing runs in the background otherwise.\n\n" +
                 "📍 /location — Get GPS coordinates now\n" +
                 "📊 /status  — Check service & battery\n" +
@@ -210,23 +192,21 @@ namespace Finder.Droid.Managers
         {
             await SendMessageAsync(s,
                 "📋 *Finder Lite — Commands*\n\n" +
-                "/location — Fresh GPS fix with Google Maps link\n" +
-                "/status   — Service status, GPS state, battery\n" +
+                "/location — Fresh GPS fix with Maps link\n" +
+                "/status   — Service status, GPS, battery\n" +
+                "/version  — Installed app version\n" +
+                "/update   — Self-update: `/update <version> <url>`\n" +
                 "/help     — This message\n" +
                 "/start    — Welcome & quick-start guide");
         }
 
         private async Task HandleLocationAsync(AppSettings s)
         {
-            // Acknowledge immediately so the user knows the request is being handled
             await SendMessageAsync(s, "📡 Fetching GPS fix…");
 
             try
             {
-                // 1. Try last-known location first (instant, no battery cost)
                 AndroidLocation loc = GetLastKnownLocation();
-
-                // 2. If null or older than 60 s, request a fresh fix
                 if (loc == null || IsStale(loc))
                     loc = await RequestFreshGpsFixAsync();
 
@@ -234,14 +214,12 @@ namespace Finder.Droid.Managers
                 {
                     await SendMessageAsync(s,
                         "❌ *Could not get a GPS fix.*\n" +
-                        "Please make sure GPS is enabled on the device and try again.");
+                        "Please make sure GPS is enabled and try again.");
                     return;
                 }
 
-                // Send a native Telegram map pin (shows inline in chat)
                 await SendLocationPinAsync(s, loc.Latitude, loc.Longitude);
 
-                // Then send a detailed text message
                 string lat = loc.Latitude.ToString("F6",
                     System.Globalization.CultureInfo.InvariantCulture);
                 string lon = loc.Longitude.ToString("F6",
@@ -276,10 +254,12 @@ namespace Finder.Droid.Managers
         {
             bool gps = IsGpsEnabled();
             int bat = GetBatteryLevel();
+            string ver = GetAppVersion();
 
             string msg =
                 $"📊 *Finder Lite Status*\n\n" +
                 $"Service: ✅ Running\n" +
+                $"Version: v{ver}\n" +
                 $"GPS:     {(gps ? "✅ Enabled" : "❌ Disabled")}\n" +
                 (bat >= 0 ? $"Battery: {bat}%\n" : "") +
                 $"Time:    {DateTime.Now:HH:mm:ss}";
@@ -287,11 +267,154 @@ namespace Finder.Droid.Managers
             await SendMessageAsync(s, msg);
         }
 
+        private async Task HandleVersionAsync(AppSettings s)
+        {
+            string ver = GetAppVersion();
+            await SendMessageAsync(s,
+                $"📦 *Finder Lite*\n\nInstalled version: *v{ver}*");
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // /update command
+        // ══════════════════════════════════════════════════════════════════
+
+        private async Task HandleUpdateAsync(AppSettings s, string param)
+        {
+            // ── Parse arguments ───────────────────────────────────────────
+            if (string.IsNullOrEmpty(param))
+            {
+                await SendMessageAsync(s,
+                    "📦 *Update Command*\n\n" +
+                    "Usage: `/update <new_version> <apk_url>`\n\n" +
+                    "Example:\n" +
+                    "`/update 1.0.1 https://example.com/finder.apk`");
+                return;
+            }
+
+            string[] args = param.Split(new[] { ' ' }, 2);
+            if (args.Length != 2)
+            {
+                await SendMessageAsync(s,
+                    "❌ Invalid format. Use:\n" +
+                    "`/update <version> <url>`");
+                return;
+            }
+
+            string newVersion = args[0].Trim();
+            string url = args[1].Trim();
+
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                await SendMessageAsync(s,
+                    "❌ URL must start with `http://` or `https://`.");
+                return;
+            }
+
+            string currentVersion = GetAppVersion();
+
+            // ── Check install permission (Android 8+) ─────────────────────
+            if (!ApkInstaller.CanInstallPackages(_context))
+            {
+                await SendMessageAsync(s,
+                    "⚠️ *Install permission required*\n\n" +
+                    "Finder Lite needs permission to install APK updates.\n" +
+                    "Opening the Settings page on the device now — please enable " +
+                    "*Allow from this source* and run /update again.");
+
+                ApkInstaller.OpenInstallPermissionSettings(_context);
+                return;
+            }
+
+            // ── Ask the UI for confirmation ──────────────────────────────
+            await SendMessageAsync(s,
+                $"📦 *Update Request*\n\n" +
+                $"Current: v{currentVersion}\n" +
+                $"New: v{newVersion}\n\n" +
+                $"⏳ Waiting for confirmation on the device " +
+                $"(60s timeout)…");
+
+            bool confirmed = await RequestUpdateConfirmationAsync(
+                currentVersion, newVersion, url);
+
+            if (!confirmed)
+            {
+                await SendMessageAsync(s,
+                    "❌ Update cancelled (declined or timed out).");
+                return;
+            }
+
+            // ── Download ─────────────────────────────────────────────────
+            await SendMessageAsync(s,
+                $"⬇️ Downloading APK…\n_This may take a minute._");
+
+            var dl = await ApkDownloaderService.DownloadAsync(_context, url, newVersion);
+            if (!dl.Success)
+            {
+                await SendMessageAsync(s, $"❌ Download failed:\n`{dl.ErrorMessage}`");
+                return;
+            }
+
+            await SendMessageAsync(s,
+                "✅ Download complete and verified.\n" +
+                "📲 Launching installer on the device…");
+
+            // ── Save pending flag BEFORE launching installer ─────────────
+            // (after install, the process is killed; we read this on next launch.)
+            SavePendingVersion(newVersion);
+
+            // ── Launch installer ─────────────────────────────────────────
+            bool launched = ApkInstaller.InstallApk(_context, dl.FilePath);
+            if (!launched)
+            {
+                ClearPendingVersion();
+                await SendMessageAsync(s,
+                    "❌ Could not launch the installer. " +
+                    "Make sure install permission is granted and try again.");
+            }
+        }
+
+        /// <summary>
+        /// Sends an UpdateConfirmRequest to the UI via MessagingCenter and
+        /// awaits the user's Yes/No answer (or a 60 s timeout).
+        /// </summary>
+        private async Task<bool> RequestUpdateConfirmationAsync(
+            string currentVersion, string newVersion, string url)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+
+            var request = new UpdateConfirmRequest
+            {
+                CurrentVersion = currentVersion,
+                NewVersion = newVersion,
+                DownloadUrl = url,
+                ResponseSource = tcs
+            };
+
+            // MessagingCenter calls must occur on the main thread
+            Device.BeginInvokeOnMainThread(() =>
+            {
+                MessagingCenter.Send<TelegramCommandHandler, UpdateConfirmRequest>(
+                    this, "ShowUpdateConfirm", request);
+            });
+
+            // Race the confirmation against a 60-second timeout
+            var timeout = Task.Delay(UPDATE_CONFIRM_TIMEOUT_MS);
+            var done = await Task.WhenAny(tcs.Task, timeout);
+
+            if (done == timeout)
+            {
+                tcs.TrySetResult(false);
+                return false;
+            }
+
+            return await tcs.Task;
+        }
+
         // ══════════════════════════════════════════════════════════════════
         // GPS helpers
         // ══════════════════════════════════════════════════════════════════
 
-        /// <summary>Returns the cached GPS fix from the system, if available.</summary>
         private AndroidLocation GetLastKnownLocation()
         {
             try
@@ -302,75 +425,51 @@ namespace Finder.Droid.Managers
             catch { return null; }
         }
 
-        /// <summary>Returns true if the location fix is older than 60 seconds.</summary>
         private bool IsStale(AndroidLocation loc)
         {
             if (Build.VERSION.SdkInt >= BuildVersionCodes.JellyBeanMr1)
             {
-                // ElapsedRealtimeNanos is monotonic and boot-safe
                 long ageMs =
                     (SystemClock.ElapsedRealtimeNanos() - loc.ElapsedRealtimeNanos)
                     / 1_000_000L;
                 return ageMs > 60_000;
             }
-            // Fallback: wall-clock UTC time comparison
             return (Java.Lang.JavaSystem.CurrentTimeMillis() - loc.Time) > 60_000;
         }
 
-        /// <summary>
-        /// Requests a single GPS fix from the hardware.
-        /// Waits up to GPS_FIX_TIMEOUT_MS for a result; returns null on timeout.
-        /// </summary>
         private async Task<AndroidLocation> RequestFreshGpsFixAsync()
         {
             var tcs = new TaskCompletionSource<AndroidLocation>();
-
             try
             {
                 var lm = (LocationManager)_context.GetSystemService(Context.LocationService);
-
                 if (lm == null || !lm.IsProviderEnabled(LocationManager.GpsProvider))
                     return null;
 
                 var listener = new SingleShotLocationListener(tcs);
 
-                // RequestLocationUpdates requires a Looper — use the main thread's Looper
                 var handler = new Handler(Looper.MainLooper);
                 handler.Post(() =>
                 {
                     try
                     {
-                        // Positional args only — named params cause CS1503 ambiguity
                         lm.RequestLocationUpdates(
                             LocationManager.GpsProvider,
-                            0L,     // minTimeMs
-                            0f,     // minDistanceMeters
-                            listener,
-                            Looper.MainLooper);
+                            0L, 0f, listener, Looper.MainLooper);
                     }
-                    catch (Exception ex)
-                    {
-                        tcs.TrySetException(ex);
-                    }
+                    catch (Exception ex) { tcs.TrySetException(ex); }
                 });
 
-                // Race: GPS fix vs 30-second timeout
                 var timeout = Task.Delay(GPS_FIX_TIMEOUT_MS);
                 var completed = await Task.WhenAny(tcs.Task, timeout);
 
-                // Always remove the listener to stop GPS hardware
-                try { lm.RemoveUpdates(listener); }
-                catch { }
+                try { lm.RemoveUpdates(listener); } catch { }
 
                 return completed == tcs.Task ? await tcs.Task : null;
             }
-            catch
-            {
-                return null;
-            }
+            catch { return null; }
         }
 
-        /// <summary>Returns true if the device GPS provider is currently enabled.</summary>
         private bool IsGpsEnabled()
         {
             try
@@ -382,26 +481,62 @@ namespace Finder.Droid.Managers
         }
 
         // ══════════════════════════════════════════════════════════════════
-        // Battery helper
+        // Battery / version helpers
         // ══════════════════════════════════════════════════════════════════
 
         private int GetBatteryLevel()
         {
             try
             {
-                var filter = new Android.Content.IntentFilter(
-                    Android.Content.Intent.ActionBatteryChanged);
+                var filter = new IntentFilter(Intent.ActionBatteryChanged);
                 var status = _context.RegisterReceiver(null, filter);
 
-                int level = status?.GetIntExtra(
-                    Android.OS.BatteryManager.ExtraLevel, -1) ?? -1;
-                int scale = status?.GetIntExtra(
-                    Android.OS.BatteryManager.ExtraScale, -1) ?? -1;
+                int level = status?.GetIntExtra(BatteryManager.ExtraLevel, -1) ?? -1;
+                int scale = status?.GetIntExtra(BatteryManager.ExtraScale, -1) ?? -1;
 
                 if (level < 0 || scale <= 0) return -1;
                 return (int)(level * 100.0f / scale);
             }
             catch { return -1; }
+        }
+
+        private string GetAppVersion()
+        {
+            try
+            {
+                var pm = _context.PackageManager;
+                var info = pm?.GetPackageInfo(_context.PackageName, 0);
+                return info?.VersionName ?? "1.0.0";
+            }
+            catch { return "1.0.0"; }
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // Pending update helpers (used by MainActivity.OnResume)
+        // ══════════════════════════════════════════════════════════════════
+
+        private void SavePendingVersion(string version)
+        {
+            try
+            {
+                PreferenceManager.GetDefaultSharedPreferences(_context)
+                    .Edit()
+                    .PutString(PREF_PENDING_VERSION, version)
+                    .Apply();
+            }
+            catch { }
+        }
+
+        private void ClearPendingVersion()
+        {
+            try
+            {
+                PreferenceManager.GetDefaultSharedPreferences(_context)
+                    .Edit()
+                    .Remove(PREF_PENDING_VERSION)
+                    .Apply();
+            }
+            catch { }
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -412,18 +547,18 @@ namespace Finder.Droid.Managers
         {
             try
             {
-                // Give the service a moment to fully initialise
                 await Task.Delay(STARTUP_DELAY_MS);
-
                 var settings = LoadSettings();
                 if (settings == null) return;
 
                 int bat = GetBatteryLevel();
+                string ver = GetAppVersion();
                 string msg =
                     $"✅ *Finder Lite started*\n\n" +
-                    $"The service is now running and listening.\n" +
+                    $"The service is running and listening.\n" +
+                    $"Version: v{ver}\n" +
                     (bat >= 0 ? $"Battery: {bat}%\n" : "") +
-                    $"\nSend /location to get your current GPS coordinates.";
+                    $"\nSend /location to get coordinates.";
 
                 await SendMessageAsync(settings, msg);
             }
@@ -444,7 +579,6 @@ namespace Finder.Droid.Managers
                     $"&text={Uri.EscapeDataString(text)}" +
                     $"&parse_mode=Markdown" +
                     $"&disable_web_page_preview=true";
-
                 await _httpClient.GetAsync(url);
             }
             catch { }
@@ -459,7 +593,6 @@ namespace Finder.Droid.Managers
                     $"?chat_id={s.ChatId}" +
                     $"&latitude={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)}" +
                     $"&longitude={lon.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
-
                 await _httpClient.GetAsync(url);
             }
             catch { }
@@ -493,7 +626,7 @@ namespace Finder.Droid.Managers
         }
 
         // ══════════════════════════════════════════════════════════════════
-        // JSON models (internal, not shared)
+        // JSON models
         // ══════════════════════════════════════════════════════════════════
 
         private class TgResult
@@ -523,10 +656,6 @@ namespace Finder.Droid.Managers
         // One-shot GPS listener
         // ══════════════════════════════════════════════════════════════════
 
-        /// <summary>
-        /// ILocationListener that completes the TCS on the first fix,
-        /// then becomes inert. The caller is responsible for RemoveUpdates().
-        /// </summary>
         private class SingleShotLocationListener
             : Java.Lang.Object, ILocationListener
         {
@@ -543,7 +672,6 @@ namespace Finder.Droid.Managers
                 _tcs.TrySetResult(location);
             }
 
-            // Provider disabled before a fix arrived
             public void OnProviderDisabled(string provider)
             {
                 if (_done) return;

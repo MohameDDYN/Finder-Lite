@@ -13,17 +13,12 @@
             <!-- ═══════════════════════════════════════════════════════════ -->
             <Frame Style="{StaticResource CardStyle}" Padding="24,20">
                 <StackLayout Spacing="4" HorizontalOptions="Center">
-
-                    <Label Text="📡"
-                           FontSize="52"
-                           HorizontalOptions="Center" />
-
+                    <Label Text="📡" FontSize="52" HorizontalOptions="Center" />
                     <Label Text="Finder Lite"
                            FontSize="26"
                            FontAttributes="Bold"
                            TextColor="{StaticResource PrimaryColor}"
                            HorizontalOptions="Center" />
-
                     <Label Text="On-Demand GPS via Telegram"
                            FontSize="13"
                            TextColor="{StaticResource TextSecondaryColor}"
@@ -36,18 +31,13 @@
             <!-- ═══════════════════════════════════════════════════════════ -->
             <Frame Style="{StaticResource CardStyle}">
                 <StackLayout Spacing="10">
-
-                    <Label Text="STATUS"
-                           Style="{StaticResource SectionLabelStyle}" />
+                    <Label Text="STATUS" Style="{StaticResource SectionLabelStyle}" />
 
                     <StackLayout Orientation="Horizontal" Spacing="10">
-                        <!-- Live colour dot -->
-                        <BoxView WidthRequest="14"
-                                 HeightRequest="14"
+                        <BoxView WidthRequest="14" HeightRequest="14"
                                  CornerRadius="7"
                                  VerticalOptions="Center"
                                  Color="{Binding StatusDotColor}" />
-
                         <Label Text="{Binding StatusText}"
                                FontSize="15"
                                FontAttributes="Bold"
@@ -55,7 +45,6 @@
                                VerticalOptions="Center" />
                     </StackLayout>
 
-                    <!-- Spinner during start/stop -->
                     <ActivityIndicator IsRunning="{Binding IsBusy}"
                                        IsVisible="{Binding IsBusy}"
                                        Color="{StaticResource PrimaryColor}"
@@ -68,16 +57,13 @@
             <!-- ═══════════════════════════════════════════════════════════ -->
             <Frame Style="{StaticResource CardStyle}">
                 <StackLayout Spacing="8">
-
                     <Label Text="TELEGRAM SETTINGS"
                            Style="{StaticResource SectionLabelStyle}" />
 
-                    <!-- Bot Token -->
                     <Label Text="Bot Token"
                            FontSize="12"
                            TextColor="{StaticResource TextSecondaryColor}" />
-                    <Frame Padding="12,0"
-                           CornerRadius="10"
+                    <Frame Padding="12,0" CornerRadius="10"
                            BorderColor="{StaticResource TextLightColor}"
                            HasShadow="False"
                            BackgroundColor="{StaticResource BackgroundColor}">
@@ -89,13 +75,11 @@
                                BackgroundColor="Transparent" />
                     </Frame>
 
-                    <!-- Chat ID -->
                     <Label Text="Chat ID"
                            FontSize="12"
                            Margin="0,6,0,0"
                            TextColor="{StaticResource TextSecondaryColor}" />
-                    <Frame Padding="12,0"
-                           CornerRadius="10"
+                    <Frame Padding="12,0" CornerRadius="10"
                            BorderColor="{StaticResource TextLightColor}"
                            HasShadow="False"
                            BackgroundColor="{StaticResource BackgroundColor}">
@@ -108,7 +92,6 @@
                                BackgroundColor="Transparent" />
                     </Frame>
 
-                    <!-- Save button -->
                     <Button Text="💾  Save Settings"
                             Command="{Binding SaveSettingsCommand}"
                             BackgroundColor="{StaticResource TextSecondaryColor}"
@@ -125,23 +108,18 @@
             <!-- ═══════════════════════════════════════════════════════════ -->
             <Frame Style="{StaticResource CardStyle}">
                 <StackLayout Spacing="10">
+                    <Label Text="CONTROL" Style="{StaticResource SectionLabelStyle}" />
 
-                    <Label Text="CONTROL"
-                           Style="{StaticResource SectionLabelStyle}" />
-
-                    <!-- START — shown only when service is NOT running -->
                     <Button Text="▶  Start Service"
                             Style="{StaticResource PrimaryButtonStyle}"
                             Command="{Binding StartServiceCommand}"
                             IsVisible="{Binding IsServiceRunning,
                                         Converter={StaticResource InverseBool}}" />
 
-                    <!-- STOP — shown only when service IS running -->
                     <Button Text="■  Stop Service"
                             Style="{StaticResource DangerButtonStyle}"
                             Command="{Binding StopServiceCommand}"
                             IsVisible="{Binding IsServiceRunning}" />
-
                 </StackLayout>
             </Frame>
 
@@ -150,7 +128,6 @@
             <!-- ═══════════════════════════════════════════════════════════ -->
             <Frame Style="{StaticResource CardStyle}">
                 <StackLayout Spacing="10">
-
                     <Label Text="TELEGRAM COMMANDS"
                            Style="{StaticResource SectionLabelStyle}" />
 
@@ -164,48 +141,66 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <!-- /location -->
                         <Label Grid.Row="0" Grid.Column="0"
                                Text="/location"
                                FontSize="13" FontAttributes="Bold"
                                TextColor="{StaticResource PrimaryColor}" />
                         <Label Grid.Row="0" Grid.Column="1"
-                               Text="Get exact GPS coordinates + Google Maps link"
+                               Text="Get GPS coordinates + Maps link"
                                FontSize="13"
                                TextColor="{StaticResource TextSecondaryColor}"
                                VerticalOptions="Center" />
 
-                        <!-- /status -->
                         <Label Grid.Row="1" Grid.Column="0"
                                Text="/status"
                                FontSize="13" FontAttributes="Bold"
                                TextColor="{StaticResource PrimaryColor}" />
                         <Label Grid.Row="1" Grid.Column="1"
-                               Text="Service status, GPS state, battery level"
+                               Text="Service, GPS, battery state"
                                FontSize="13"
                                TextColor="{StaticResource TextSecondaryColor}"
                                VerticalOptions="Center" />
 
-                        <!-- /help -->
                         <Label Grid.Row="2" Grid.Column="0"
-                               Text="/help"
+                               Text="/version"
                                FontSize="13" FontAttributes="Bold"
                                TextColor="{StaticResource PrimaryColor}" />
                         <Label Grid.Row="2" Grid.Column="1"
+                               Text="Show installed app version"
+                               FontSize="13"
+                               TextColor="{StaticResource TextSecondaryColor}"
+                               VerticalOptions="Center" />
+
+                        <Label Grid.Row="3" Grid.Column="0"
+                               Text="/update"
+                               FontSize="13" FontAttributes="Bold"
+                               TextColor="{StaticResource PrimaryColor}" />
+                        <Label Grid.Row="3" Grid.Column="1"
+                               Text="Self-update from APK URL"
+                               FontSize="13"
+                               TextColor="{StaticResource TextSecondaryColor}"
+                               VerticalOptions="Center" />
+
+                        <Label Grid.Row="4" Grid.Column="0"
+                               Text="/help"
+                               FontSize="13" FontAttributes="Bold"
+                               TextColor="{StaticResource PrimaryColor}" />
+                        <Label Grid.Row="4" Grid.Column="1"
                                Text="Show all available commands"
                                FontSize="13"
                                TextColor="{StaticResource TextSecondaryColor}"
                                VerticalOptions="Center" />
 
-                        <!-- /start -->
-                        <Label Grid.Row="3" Grid.Column="0"
+                        <Label Grid.Row="5" Grid.Column="0"
                                Text="/start"
                                FontSize="13" FontAttributes="Bold"
                                TextColor="{StaticResource PrimaryColor}" />
-                        <Label Grid.Row="3" Grid.Column="1"
-                               Text="Welcome message and quick-start guide"
+                        <Label Grid.Row="5" Grid.Column="1"
+                               Text="Welcome message and help"
                                FontSize="13"
                                TextColor="{StaticResource TextSecondaryColor}"
                                VerticalOptions="Center" />
@@ -213,9 +208,6 @@
                 </StackLayout>
             </Frame>
 
-            <!-- ═══════════════════════════════════════════════════════════ -->
-            <!--  Footer                                                     -->
-            <!-- ═══════════════════════════════════════════════════════════ -->
             <Label Text="Finder Lite · GPS on demand, nothing more."
                    FontSize="11"
                    TextColor="{StaticResource TextLightColor}"
