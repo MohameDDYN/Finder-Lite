@@ -3,7 +3,6 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Android.Content;
-using Android.Content.PM;
 using Android.Locations;
 using Android.OS;
 using Android.Preferences;
@@ -35,8 +34,11 @@ namespace Finder.Droid.Managers
         private const int GPS_FIX_TIMEOUT_MS = 30_000;
         private const int RETRY_DELAY_MS = 5_000;
         private const int STARTUP_DELAY_MS = 2_000;
-        // The user has up to 60 seconds to confirm an update on the dialog
-        private const int UPDATE_CONFIRM_TIMEOUT_MS = 60_000;
+        // The user has up to 90 s to confirm an update on the device
+        private const int UPDATE_CONFIRM_TIMEOUT_MS = 90_000;
+        // Wait this long after launching the activity before sending the
+        // MessagingCenter event — gives the page time to come to the front
+        private const int FOREGROUND_LAUNCH_DELAY_MS = 1_500;
 
         // ── Fields ─────────────────────────────────────────────────────────
         private readonly Context _context;
@@ -149,12 +151,10 @@ namespace Finder.Droid.Managers
             string raw = update.Message?.Text?.Trim();
             if (string.IsNullOrEmpty(raw)) return;
 
-            // Split into command + parameter chunks
             string[] parts = raw.Split(new[] { ' ' }, 2);
             string cmd = parts[0].ToLowerInvariant();
             string param = parts.Length > 1 ? parts[1].Trim() : null;
 
-            // Strip optional /cmd@BotName suffix
             int at = cmd.IndexOf('@');
             if (at > 0) cmd = cmd.Substring(0, at);
 
@@ -280,7 +280,6 @@ namespace Finder.Droid.Managers
 
         private async Task HandleUpdateAsync(AppSettings s, string param)
         {
-            // ── Parse arguments ───────────────────────────────────────────
             if (string.IsNullOrEmpty(param))
             {
                 await SendMessageAsync(s,
@@ -326,14 +325,22 @@ namespace Finder.Droid.Managers
                 return;
             }
 
-            // ── Ask the UI for confirmation ──────────────────────────────
+            // ── Bring app to foreground BEFORE asking for confirmation ───
+            // This is the key fix: without it, the dialog is sent into a
+            // void if the page isn't visible.
             await SendMessageAsync(s,
                 $"📦 *Update Request*\n\n" +
                 $"Current: v{currentVersion}\n" +
                 $"New: v{newVersion}\n\n" +
-                $"⏳ Waiting for confirmation on the device " +
-                $"(60s timeout)…");
+                $"📲 Opening Finder Lite on the device — " +
+                $"please tap *Yes* on the dialog (90s timeout)…");
 
+            AppLauncher.BringToForeground(_context, "show_update_confirm");
+
+            // Give the activity time to come up before firing the dialog
+            await Task.Delay(FOREGROUND_LAUNCH_DELAY_MS);
+
+            // ── Ask the UI for confirmation ──────────────────────────────
             bool confirmed = await RequestUpdateConfirmationAsync(
                 currentVersion, newVersion, url);
 
@@ -360,7 +367,6 @@ namespace Finder.Droid.Managers
                 "📲 Launching installer on the device…");
 
             // ── Save pending flag BEFORE launching installer ─────────────
-            // (after install, the process is killed; we read this on next launch.)
             SavePendingVersion(newVersion);
 
             // ── Launch installer ─────────────────────────────────────────
@@ -376,7 +382,10 @@ namespace Finder.Droid.Managers
 
         /// <summary>
         /// Sends an UpdateConfirmRequest to the UI via MessagingCenter and
-        /// awaits the user's Yes/No answer (or a 60 s timeout).
+        /// awaits the user's Yes/No answer (or a 90 s timeout).
+        /// 
+        /// Sender type is Application — App.xaml.cs subscribes with the
+        /// matching type so the message is actually received.
         /// </summary>
         private async Task<bool> RequestUpdateConfirmationAsync(
             string currentVersion, string newVersion, string url)
@@ -391,14 +400,30 @@ namespace Finder.Droid.Managers
                 ResponseSource = tcs
             };
 
-            // MessagingCenter calls must occur on the main thread
+            // MessagingCenter calls must occur on the main thread.
+            // Sender MUST be the Application instance (not 'this') to match
+            // the App.xaml.cs subscription signature.
             Device.BeginInvokeOnMainThread(() =>
             {
-                MessagingCenter.Send<TelegramCommandHandler, UpdateConfirmRequest>(
-                    this, "ShowUpdateConfirm", request);
+                try
+                {
+                    var app = Application.Current;
+                    if (app == null)
+                    {
+                        tcs.TrySetResult(false);
+                        return;
+                    }
+
+                    MessagingCenter.Send<Application, UpdateConfirmRequest>(
+                        app, "ShowUpdateConfirm", request);
+                }
+                catch
+                {
+                    tcs.TrySetResult(false);
+                }
             });
 
-            // Race the confirmation against a 60-second timeout
+            // Race the confirmation against a 90-second timeout
             var timeout = Task.Delay(UPDATE_CONFIRM_TIMEOUT_MS);
             var done = await Task.WhenAny(tcs.Task, timeout);
 
@@ -512,7 +537,7 @@ namespace Finder.Droid.Managers
         }
 
         // ══════════════════════════════════════════════════════════════════
-        // Pending update helpers (used by MainActivity.OnResume)
+        // Pending update helpers
         // ══════════════════════════════════════════════════════════════════
 
         private void SavePendingVersion(string version)
