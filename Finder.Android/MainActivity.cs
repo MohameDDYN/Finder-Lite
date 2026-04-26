@@ -11,7 +11,7 @@ namespace Finder.Droid
 {
     [Activity(
         Label = "Finder Lite",
-        Icon = "@mipmap/ic_launcher",
+        Icon = "@mipmap/icon",
         Theme = "@style/MainTheme.Splash",
         MainLauncher = true,
         ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation

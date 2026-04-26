@@ -8,9 +8,9 @@ using Xamarin.Forms;
 
 namespace Finder
 {
-    public partial class MainPage : ContentPage
+    public partial class OldMainPage : ContentPage
     {
-        public MainPage()
+        public OldMainPage()
         {
             InitializeComponent();
         }
